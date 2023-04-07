@@ -1,4 +1,5 @@
 import logging
+import torch
 import torch.optim as optim 
 
 from datetime import datetime
@@ -22,6 +23,7 @@ class DistillTrainer():
         lr=1e-4,
         epochs=20
     ):
+        self.run_name = run_name
         self.same_vocab = same_vocab
         self.distiller = Distiller(
             teacher=teacher, 
@@ -37,6 +39,7 @@ class DistillTrainer():
         self.test_set = test_dataloader
         self.optimizer = optim.AdamW(self.distiller.parameters(), lr=lr)
         self.logger = logging.logger
+        self.lowest_val_loss = 1000000
         
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         self.writer = SummaryWriter(f'runs/{run_name}_{timestamp}')
@@ -88,8 +91,14 @@ class DistillTrainer():
                 val_student_loss = running_student_loss / len(self.val_set)
                 val_distill_loss = running_distill_loss / len(self.val_set)
                 
+                if val_loss < self.lowest_val_loss:
+                    self.save(epoch_num, step_num, val_loss, val_student_loss, val_distill_loss)
+                    self.lowest_val_loss = val_loss
+                
                 self.loss_logger(epoch_num, step_num, val_loss, val_student_loss, val_distill_loss, train=False)
                 self.distiller.train(True)
+        
+        self.writer.flush()
                 
     def loss_logger(self, epoch_num, step_num, loss, student_loss, distill_loss, train=True):
         stage = "Train"
@@ -104,16 +113,16 @@ class DistillTrainer():
         self.writer.add_scalar(f'Distill_Loss/{stage}', distill_loss, global_step_num)
                 
     def train(self):
-        pass
+        for epoch_num in range(self.epochs):
+            self.epoch(epoch_num)
     
-    def val(self):
-        pass
+    def save(self, epoch_num, step_num, val_loss, val_student_loss, val_distill_loss):
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        model_path = f'{self.run_name}_valloss{val_loss}_stloss{val_student_loss}_dsloss{val_distill_loss}_epoch{epoch_num}_step{step_num}_{timestamp}'
+        torch.save(self.distiller.student.state_dict(), model_path)
     
     def test(self):
-        pass
-    
-    def save(self):
-        pass
+            pass
     
     
     
